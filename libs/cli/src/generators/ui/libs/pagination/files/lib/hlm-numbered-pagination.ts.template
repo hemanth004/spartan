@@ -257,11 +257,12 @@ export function keepPaginationFocus(...watched: Signal<unknown>[]): void {
 		lastFocused = event.target as Element | null;
 	});
 	// Forget the control once focus moves to an element outside this pagination (e.g. another
-	// pagination on the page). Removing the focused control moves focus to the body without a
-	// focusin, so that case still restores focus after the render.
-	const unlistenOut = renderer.listen('document', 'focusin', (event: FocusEvent) => {
-		// the composed path is not retargeted, so it also works when the pagination is in a shadow root
-		if (!event.composedPath().includes(host)) lastFocused = null;
+	// pagination on the page). `relatedTarget` is retargeted relative to this host, so it is correct
+	// in open and closed shadow roots. It is null when the focused control is removed or the window
+	// loses focus, in which case the control is kept so focus can be restored after the render.
+	const unlistenOut = renderer.listen(host, 'focusout', (event: FocusEvent) => {
+		const next = event.relatedTarget as Node | null;
+		if (next && !host.contains(next)) lastFocused = null;
 	});
 	inject(DestroyRef).onDestroy(() => {
 		unlistenIn();

@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, signal, ViewEncapsulation } from '@angular/core';
+import {
+	ApplicationRef,
+	ChangeDetectionStrategy,
+	Component,
+	createComponent,
+	EnvironmentInjector,
+	signal,
+	ViewEncapsulation,
+} from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { render, screen, within } from '@testing-library/angular';
 import userEvent from '@testing-library/user-event';
@@ -231,11 +240,54 @@ describe('HlmNumberedPagination accessibility', () => {
 		const { fixture } = await render(ShadowPaginationHost);
 		const root = (fixture.nativeElement as HTMLElement).shadowRoot as ShadowRoot;
 
-		root.querySelector<HTMLElement>('[aria-label="Go to next page"]')!.focus();
+		const next = root.querySelector<HTMLElement>('[aria-label="Go to next page"]')!;
+		next.focus();
+		expect(root.activeElement).toBe(next);
+
 		fixture.componentInstance.totalItems.set(5);
 		await fixture.whenStable();
 
 		expect(root.querySelector('[aria-label="Go to next page"]')).toBeNull();
-		expect(root.activeElement).toBe(root.querySelector('[aria-current="page"]'));
+		const current = root.querySelector('[aria-current="page"]');
+		expect(current).not.toBeNull();
+		expect(root.activeElement).toBe(current);
+	});
+
+	it('restores focus when the pagination is rendered inside a closed shadow root', () => {
+		// unlike render(), createComponent does not set up a router, which hlmPaginationLink needs
+		TestBed.configureTestingModule({ providers: [provideRouter([])] });
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const root = container.attachShadow({ mode: 'closed' });
+		const hostElement = document.createElement('div');
+		root.appendChild(hostElement);
+
+		const ref = createComponent(HlmNumberedPagination, {
+			environmentInjector: TestBed.inject(EnvironmentInjector),
+			hostElement,
+		});
+		ref.setInput('currentPage', 1);
+		ref.setInput('itemsPerPage', 10);
+		ref.setInput('totalItems', 100);
+		const appRef = TestBed.inject(ApplicationRef);
+		appRef.attachView(ref.hostView);
+		appRef.tick();
+
+		try {
+			const next = root.querySelector<HTMLElement>('[aria-label="Go to next page"]')!;
+			next.focus();
+			expect(root.activeElement).toBe(next);
+
+			ref.setInput('totalItems', 5);
+			appRef.tick();
+
+			expect(root.querySelector('[aria-label="Go to next page"]')).toBeNull();
+			const current = root.querySelector('[aria-current="page"]');
+			expect(current).not.toBeNull();
+			expect(root.activeElement).toBe(current);
+		} finally {
+			ref.destroy();
+			container.remove();
+		}
 	});
 });
